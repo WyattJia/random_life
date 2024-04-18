@@ -1,3 +1,4 @@
+colorama==0.4.6
 geographiclib==2.0
 geopy==2.4.1
 numpy==1.26.4
