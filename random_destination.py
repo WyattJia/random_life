@@ -8,33 +8,33 @@ init(autoreset=True)
 def select_location_within_distance(file_path, max_distance, reference_coords, province_weight):
     """
     选择一个随机地点，该地点距离上海不超过600公里，并根据省份权重进行选择调整。
-    
+
     参数:
     - file_path: CSV文件路径，包含位置数据。
     - max_distance: 允许的最大距离（公里）。
     - reference_coords: 上海的坐标（纬度，经度）。
     - province_weight: 省份权重字典。
-    
+
     返回:
     - 随机选定的位置名称。
     """
     print(f"{Fore.YELLOW}加载数据... \n       <<<<<  {file_path}  >>>>>     ")
     df = pd.read_csv(file_path, names=['行政代码', '地名', '东经', '北纬'], header=None, skiprows=1)
-    
+
     df['距离'] = df.apply(lambda row: geodesic((row['北纬'], row['东经']), reference_coords).km, axis=1)
-    
+
     print(f"{Fore.CYAN}筛选距离≤ {max_distance}公里的地点")
     df_close = df[df['距离'] <= max_distance].copy()
-    
+
     if df_close.empty:
         print(f"{Fore.RED}没有找到任何距离小于或等于 {max_distance} 公里的地点。")
         return None
-    
+
     # 确保省份权重计算中至少有一个默认值1
     df_close['权重'] = df_close['地名'].apply(
-        lambda x: max((province_weight.get(prov, 1) for prov in province_weight if prov in x), default=1)
-    )
-    
+            lambda x: max((province_weight.get(prov, 1) for prov in province_weight if prov in x), default=1)
+            )
+
     print(f"{Fore.GREEN}随机选择地点中...")
     selected_location = df_close.sample(weights=df_close['权重'])['地名'].iloc[0]
     return selected_location
