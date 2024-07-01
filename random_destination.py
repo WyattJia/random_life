@@ -1,57 +1,85 @@
 import pandas as pd
-from geopy.distance import geodesic
+import numpy as np
 import argparse
 from colorama import Fore, Style, init
+from typing import Tuple, Dict, Optional
 
 init(autoreset=True)
 
-def select_location_within_distance(file_path, max_distance, reference_coords, province_weight):
-    """
-    选择一个随机地点，该地点距离上海不超过600公里，并根据省份权重进行选择调整。
+def load_data(file_path: str) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(file_path)
+        return df
+    except Exception as e:
+        print(f"{Fore.RED}无法加载文件: {e}")
+        return pd.DataFrame()
 
-    参数:
-    - file_path: CSV文件路径，包含位置数据。
-    - max_distance: 允许的最大距离（公里）。
-    - reference_coords: 上海的坐标（纬度，经度）。
-    - province_weight: 省份权重字典。
+def calculate_distances_vectorized(df: pd.DataFrame, reference_coords: Tuple[float, float]) -> pd.DataFrame:
+    reference_lat, reference_lon = np.radians(reference_coords)
+    latitudes = np.radians(df['北纬'].values)
+    longitudes = np.radians(df['东经'].values)
 
-    返回:
-    - 随机选定的位置名称。
-    """
-    print(f"{Fore.YELLOW}加载数据... \n       <<<<<  {file_path}  >>>>>     ")
-    df = pd.read_csv(file_path, names=['行政代码', '地名', '东经', '北纬'], header=None, skiprows=1)
+    dlat = latitudes - reference_lat
+    dlon = longitudes - reference_lon
 
-    df['距离'] = df.apply(lambda row: geodesic((row['北纬'], row['东经']), reference_coords).km, axis=1)
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(reference_lat) * np.cos(latitudes) * np.sin(dlon / 2.0) ** 2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-    print(f"{Fore.CYAN}筛选距离≤ {max_distance}公里的地点")
-    df_close = df[df['距离'] <= max_distance].copy()
+    R = 6371.0  # 地球半径，单位为公里
+    df['距离'] = R * c
+    return df
+
+def filter_by_distance(df: pd.DataFrame, max_distance: float) -> pd.DataFrame:
+    return df[df['距离'] <= max_distance].copy()
+
+def assign_weights_vectorized(df: pd.DataFrame, province_weight: Dict[str, float]) -> pd.DataFrame:
+    weights = np.ones(len(df))
+    for province, weight in province_weight.items():
+        mask = df['地名'].str.contains(province)
+        weights[mask] = weight
+    df['权重'] = weights
+    return df
+
+def select_random_location(df: pd.DataFrame) -> Optional[Tuple[str, float, Tuple[float, float]]]:
+    if df.empty:
+        print(f"{Fore.RED}没有可供选择的地点。")
+        return None
+    
+    selected_row = df.sample(weights=df['权重']).iloc[0]
+    return selected_row['地名'], selected_row['权重'], (selected_row['北纬'], selected_row['东经'])
+
+def select_location_within_distance(file_path: str, max_distance: float, reference_coords: Tuple[float, float], province_weight: Dict[str, float]) -> Optional[Tuple[str, float, Tuple[float, float]]]:
+    df = load_data(file_path)
+    if df.empty:
+        return None
+
+    df = calculate_distances_vectorized(df, reference_coords)
+    df_close = filter_by_distance(df, max_distance)
+
+    num_cities_within_range = len(df_close)
+    print("\n")
+    print(f"{Fore.CYAN}正在筛选方圆 {max_distance} 公里内的地点，共有 {num_cities_within_range} 个城市入围\n")
 
     if df_close.empty:
         print(f"{Fore.RED}没有找到任何距离小于或等于 {max_distance} 公里的地点。")
         return None
 
-    # 确保省份权重计算中至少有一个默认值1
-    df_close['权重'] = df_close['地名'].apply(
-            lambda x: max((province_weight.get(prov, 1) for prov in province_weight if prov in x), default=1)
-            )
-
-    print(f"{Fore.GREEN}随机选择地点中...")
-    selected_location = df_close.sample(weights=df_close['权重'])['地名'].iloc[0]
-    return selected_location
+    df_close = assign_weights_vectorized(df_close, province_weight)
+    return select_random_location(df_close)
 
 def main():
-    parser = argparse.ArgumentParser(description="启动位置选择器，从上海出发，随机选择一个不超过600公里的附近地点，考虑省份权重影响。")
+    parser = argparse.ArgumentParser()
     parser.add_argument("csv_file", help="地点数据文件路径。")
     args = parser.parse_args()
 
-    print(f"{Fore.MAGENTA}启动位置选择器，从上海出发，随机选择一个不超过600公里的附近地点，考虑省份权重影响。")
     MAX_DISTANCE = 600
     REFERENCE_COORDS = (31.2304, 121.4737)
-    PROVINCE_WEIGHT = {'浙江省': 0.8, "福建省": 1.1}
+    PROVINCE_WEIGHT = {'浙江省': 0.5, " 江苏省": 0.7, "上海市": 0.5}
 
     selected_location = select_location_within_distance(args.csv_file, MAX_DISTANCE, REFERENCE_COORDS, PROVINCE_WEIGHT)
     if selected_location:
-        print(f"最终选定的位置是：\n   {Fore.YELLOW}{Style.BRIGHT}<<<<<<        {selected_location}        >>>>>>")
+        location_name, weight, coords = selected_location
+        print(f"最终选定的位置是：\n   {Fore.YELLOW}{Style.BRIGHT}-----        {location_name} (权重：{weight}, 坐标：{coords})       -----\n")
     else:
         print(f"{Fore.RED}未能选择地点，请检查数据文件或参数。")
 
