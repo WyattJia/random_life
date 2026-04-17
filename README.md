@@ -23,3 +23,10 @@ uv pip install --python .venv/bin/python -r requirements.txt
   --reference-coords 30.2741,120.1551 \
   --province-weights '浙江省:0.4,江苏省:0.8,上海市:0.6'
 ```
+
+刷新地名数据：
+
+```bash
+uv pip install --python .venv/bin/python py7zr
+.venv/bin/python scripts/repair_place_data.py
+```
