@@ -10,6 +10,7 @@ DEFAULT_MAX_DISTANCE = 600
 DEFAULT_REFERENCE_COORDS = (31.2304, 121.4737)
 DEFAULT_PROVINCE_WEIGHT = {"浙江省": 0.5, "江苏省": 0.7, "上海市": 0.5}
 
+
 def load_data(file_path: str) -> pd.DataFrame:
     try:
         df = pd.read_csv(file_path)
@@ -17,6 +18,22 @@ def load_data(file_path: str) -> pd.DataFrame:
     except Exception as e:
         print(f"{Fore.RED}无法加载文件: {e}")
         return pd.DataFrame()
+
+
+def filter_to_third_level_divisions(df: pd.DataFrame) -> pd.DataFrame:
+    if "行政代码" not in df.columns:
+        return df.copy()
+
+    codes = (
+        df["行政代码"]
+        .astype("string")
+        .str.replace(r"\.0$", "", regex=True)
+        .str.extract(r"(\d+)", expand=False)
+        .str.zfill(6)
+    )
+    mask = codes.str.fullmatch(r"\d{6}") & ~codes.str.endswith("00")
+    return df.loc[mask.fillna(False)].copy()
+
 
 def calculate_distances_vectorized(df: pd.DataFrame, reference_coords: Tuple[float, float]) -> pd.DataFrame:
     reference_lat, reference_lon = np.radians(reference_coords)
@@ -61,6 +78,11 @@ def select_random_location(df: pd.DataFrame) -> Optional[Tuple[str, float, Tuple
 def select_location_within_distance(file_path: str, max_distance: float, reference_coords: Tuple[float, float], province_weight: Dict[str, float]) -> Optional[Tuple[str, float, Tuple[float, float]]]:
     df = load_data(file_path)
     if df.empty:
+        return None
+
+    df = filter_to_third_level_divisions(df)
+    if df.empty:
+        print(f"{Fore.RED}数据中没有可供选择的第三级行政单位。")
         return None
 
     df = calculate_distances_vectorized(df, reference_coords)

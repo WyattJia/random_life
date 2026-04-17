@@ -15,6 +15,8 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python random_destination.py '全国县级以上地名代码及经纬度.csv'
 ```
 
+默认只会在第三级行政单位中抽取，也就是区、县、县级市这一层。
+
 自定义筛选范围、圆心和权重：
 
 ```bash

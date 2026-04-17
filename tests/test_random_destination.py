@@ -34,6 +34,23 @@ class AssignWeightsTests(unittest.TestCase):
         self.assertEqual(weighted.loc[2, "权重"], 1.0)
 
 
+class AdminLevelTests(unittest.TestCase):
+    def test_select_location_filters_to_third_level_divisions_by_default(self) -> None:
+        df = pd.DataFrame(
+            {
+                "行政代码": ["330000", "330100", "330106"],
+                "地名": ["浙江省", "浙江省杭州市", "浙江省杭州市西湖区"],
+                "北纬": [29.159494, 30.274085, 30.259615],
+                "东经": [119.957202, 120.15507, 120.130663],
+            }
+        )
+
+        filtered = rd.filter_to_third_level_divisions(df)
+
+        self.assertEqual(filtered["行政代码"].tolist(), ["330106"])
+        self.assertEqual(filtered["地名"].tolist(), ["浙江省杭州市西湖区"])
+
+
 class CliTests(unittest.TestCase):
     def test_script_accepts_runtime_configuration_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
